@@ -1,9 +1,9 @@
-import React, { useCallback, useRef } from 'react';
-import { FiArrowLeft, FiMail, FiLock, FiUser } from 'react-icons/fi';
+import React, { useCallback, useRef, ChangeEvent } from 'react';
+import { FiMail, FiLock, FiUser, FiCamera, FiArrowLeft } from 'react-icons/fi';
 import { FormHandles } from '@unform/core';
 import { Form } from '@unform/web';
 import * as Yup from 'yup';
-import { Link, useHistory } from 'react-router-dom';
+import { useHistory, Link } from 'react-router-dom';
 
 import api from '../../services/api';
 
@@ -11,55 +11,84 @@ import { useToast } from '../../context/ToastContext';
 
 import getValidationErrors from '../../utils/getValidationErrors';
 
-import logoImg from '../../assets/logo.svg'
-
 import Input from '../../components/Input';
 import Button from '../../components/Button';
 
-import { Container, Content, Background, AnimationContainer } from './styles';
+import { Container, Content, AvatarInput } from './styles';
+import { useAuth } from '../../context/AuthContext';
 
-interface signUpFormData
+interface ProfileFormData
 	{
 		name: string;
-		emai: string;
+		email: string;
+		old_password: string;
 		password: string;
+		password_confirmation: string;
 	}
 
-const SignUp: React.FC = () => {
+const Profile: React.FC = () => {
 	const formRef = useRef<FormHandles>(null);
 	const { addToast } = useToast();
 	const history = useHistory();
 
+	const { user, updateUser } = useAuth();
+
 	console.log(formRef);
 
-	const handleSubmit = useCallback(async (data: signUpFormData) => {
+	const handleSubmit = useCallback(async (data: ProfileFormData) => {
 		try {
 			formRef.current?.setErrors({});
 
 			const schema = Yup.object().shape({
 				name: Yup.string().required('Digite seu nome'),
 				email: Yup.string().required('Digite seu e-mail').email('Digite um e-email válido'),
-				password: Yup.string()
-				.required('Digite sua senha')
-				.min(8, 'A senha deve ter no mínimo 8 caracteres')
-				.matches(
-					/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&\*])(?=.{8,})/,
-					"A senha deve ter no mínimo 8 caracteres sendo: Um maiúsculo, um minúsculo, um número e um caracter especial"
-				),
+				old_password: Yup.string(),
+				password: Yup.string().when('old_password', {
+					is: val => !!val.length,
+					then: Yup.string()
+						.required('Digite sua nova senha')
+						.min(8, 'A senha deve ter no mínimo 8 caracteres')
+						.matches(
+							/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{8,})/,
+							"A senha deve ter no mínimo 8 caracteres sendo: Um maiúsculo, um minúsculo, um número e um caracter especial"
+						),
+				}),
+				password_confirmation: Yup.string().when('old_password', {
+					is: val => !!val.length,
+					then: Yup.string()
+						.required('Digite sua nova senha novamente')
+						.oneOf([Yup.ref('password'), null],'Senha e confirmação não são iguais'),
+					}),
 			});
 
 			await schema.validate(data, {
 				abortEarly: false,
 			});
 
-			await api.post('/users', data);
+			const { name, email, old_password, password, password_confirmation } = data;
 
-			history.push('/');
+			const formData =  {
+				name,
+				email,
+				...(old_password
+					? {
+							old_password,
+							password,
+							password_confirmation,
+						}
+					: {})
+			};
+
+			const response = await api.put('/profile', formData);
+
+			updateUser(response.data);
+
+			history.push('/dashboard');
 
 			addToast({
 				type: 'success',
-				title: 'Cadastro realizado com sucesso!',
-				description: 'Realize o logon para acessar a aplicação.',
+				title: 'Perfil atualizado',
+				description: 'Informações do perfil atualizadas com sucesso!',
 			})
 
 		} catch (err) {
@@ -74,47 +103,95 @@ const SignUp: React.FC = () => {
 
 			addToast({
 				type: 'error',
-				title: 'Error no cadastro',
-				description: 'Ocorreu um erro ao fazer o cadastro, tente novamente.'
+				title: 'Erro na atualização',
+				description: 'Ocorreu um erro ao atualizar as informações do perfil, tente novamente.'
 			});
 		}
-	},[addToast, history]);
+	},[addToast, history, updateUser]);
+
+	const handleAvatarChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+
+		if (e.target.files) {
+			const data = new FormData();
+
+			data.append('avatar', e.target.files[0]);
+
+		  api.patch('users/avatar', data).then((response) => {
+				updateUser(response.data);
+
+				addToast({
+					type: 'success',
+					title: 'Avatar atualizado com sucesso!',
+				});
+			});
+		}
+	}, [addToast, updateUser]);
 
 	return (
 		<Container>
-			<Background />
-
-			<Content>
-				<AnimationContainer>
-					<img src={logoImg} alt="GoBarber" />
-
-					<Form ref={formRef} onSubmit={handleSubmit}>
-						<h1>
-							Faça seu cadastro
-						</h1>
-
-						<Input name="name" icon={FiUser} placeholder="Nome" />
-						<Input name="email" icon={FiMail} placeholder="E-mail" />
-						<Input
-							name="password"
-							icon={FiLock}
-							type="password"
-							placeholder="Senha"
-						/>
-
-						<Button type="submit">Cadastrar</Button>
-
-					</Form>
-
-					<Link to="/">
+			<header>
+				<div>
+					<Link to="/dashboard">
 						<FiArrowLeft />
-							Voltar para Logon
 					</Link>
-				</AnimationContainer>
+				</div>
+			</header>
+			<Content>
+
+				<Form
+					ref={formRef}
+					initialData={{
+					name: user.name,
+					email: user.email,
+				}}
+				onSubmit={handleSubmit}>
+					<AvatarInput>
+						<img src={user.avatar_url} alt={user.name} />
+						<label htmlFor="avatar">
+							<FiCamera />
+
+							<input type="file" id="avatar" onChange={handleAvatarChange}/>
+						</label>
+
+					</AvatarInput>
+
+					<h1>
+						Meu perfil
+					</h1>
+
+					<Input name="name" icon={FiUser} placeholder="Nome" />
+					<Input name="email" icon={FiMail} placeholder="E-mail" />
+					<Input
+						containerStyle={{ marginTop: 24 }}
+						name="old_password"
+						icon={FiLock}
+						type="password"
+						placeholder="Senha atual"
+					/>
+
+					<Input
+						name="password"
+						icon={FiLock}
+						type="password"
+						placeholder="Nova senha"
+					/>
+
+					<Input
+						name="password_confirmation"
+						icon={FiLock}
+						type="password"
+						placeholder="Confirmar senha"
+					/>
+
+					<Button type="submit">Confirmar mudanças</Button>
+
+				</Form>
+
+
 			</Content>
 
 		</Container>
 	);
 }
 
-export default SignUp;
+export default Profile;

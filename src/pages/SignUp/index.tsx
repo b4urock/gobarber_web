@@ -43,7 +43,7 @@ const SignUp: React.FC = () => {
 				.required('Digite sua senha')
 				.min(8, 'A senha deve ter no mínimo 8 caracteres')
 				.matches(
-					/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&\*])(?=.{8,})/,
+					/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])(?=.{8,})/,
 					"A senha deve ter no mínimo 8 caracteres sendo: Um maiúsculo, um minúsculo, um número e um caracter especial"
 				),
 			});
@@ -74,8 +74,8 @@ const SignUp: React.FC = () => {
 
 			addToast({
 				type: 'error',
-				title: 'Error no cadastro',
-				description: 'Ocorreu um erro ao fazer o cadastro, tente novamente.'
+				title: 'Erro no cadastro',
+				description: 'Ocorreu um erro ao realizar o cadastro, tente novamente.'
 			});
 		}
 	},[addToast, history]);
